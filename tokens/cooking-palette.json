@@ -1,0 +1,118 @@
+{
+  "$description": "Colour and glyph per cooking method. The one palette in this repo that is not a pure transcription: four methods map onto existing brand tokens, and two hues the brand does not have were derived in OKLCH by the rule documented below. Labels and appliance hints are NOT here — they are translatable and live in strings/fr.json under `cookingMethods`, keyed by the same ids.",
+  "$extensions": {
+    "pn.why": "The sandbox expresses these as Tailwind class names (bg-orange-50, text-orange-700, ring-orange-300), which mean nothing to Compose or SwiftUI and are not brand-aligned. Resolving them to values is what lets the two native apps agree; re-anchoring them on the brand is what stops the apps looking like a Tailwind prototype.",
+    "pn.derivation": {
+      "anchors": "raw=color.brand.leaf, boiled=color.hue.sea, grilled=color.brand.carrot, roasted=color.hue.gold — exact brand values, chosen by meaning (plant / water / fire / oven).",
+      "steamed": "No brand token exists. Derived as the OKLCH midpoint of leaf and sea in all three channels: L=(0.527+0.498)/2, C=(0.094+0.056)/2, H=(150.7+222.9)/2=186.7deg. Steam sits between plant and water, and a teal lands there naturally.",
+      "fried": "No brand token exists, and gold (roasted) and warn are only 16deg apart, so a third dry-heat hue taken from the existing palette would be indistinguishable from roasted. Derived from carrot pushed darker and redder — L-0.12, C*0.95, H-14deg — which is where browning actually sits.",
+      "soft": "Every tint uses the rule MEASURED from the brand's own seven base/soft pairs: L=0.927 (sd 0.008), C=0.026, hue preserved (mean drift +1.6deg). Not eyeballed.",
+      "onSoft": "Every ink uses the rule MEASURED from the brand's own six base/ink pairs (warn, bad, sea, gold, plum, leaf): L=0.405 (sd 0.050), C=0.075, hue preserved (drift +0.1deg).",
+      "onBase": "White wherever white clears WCAG AA 4.5:1 on the fill. For grilled and roasted it does not (3.0:1 and 3.2:1), so the ink was darkened along the same hue to the lightest value reaching 4.5:1 exactly — keeping as much of the hue as accessibility allows rather than defaulting to black.",
+      "reproduce": "All values are plain sRGB hex and are design-approved, so they are facts rather than a live computation. If the brand anchors change, redo the derivation rather than nudging these by hand."
+    },
+    "pn.contrast": "Verified against WCAG 2.2. Label-on-fill is 4.5:1–5.9:1 and label-on-tint 7.0:1–7.5:1, so both pass AA for normal text at the 14px semibold the chips use. NOTE: fill-on-paper is 2.8:1 for grilled and 3.0:1 for roasted, below the 3:1 WCAG 1.4.11 wants for a component boundary — so an active chip MUST keep a border to carry that boundary, as the sandbox does with its 2px border. Do not drop the border and rely on the fill alone.",
+    "pn.emojiDecision": "`boiled` is 🫧. The sandbox disagrees with itself — 🫧 in the method picker, 💧 in the lane header — and one value was chosen deliberately: bubbles read as actively boiling rather than as generic water or hydration. 🫧 is Unicode 14 (2021), so below Android API 31 it may render as a missing glyph; ship an emoji-capable font or fall back to 💧 at the app layer rather than changing this record.",
+    "pn.usage": "base = fill of the ACTIVE method chip. soft = background of the inactive pill and of the lane drop-zone. onBase = label on the active chip. onSoft = label on the tint, and the lane header text."
+  },
+  "methods": [
+    {
+      "id": "raw",
+      "emoji": "🌿",
+      "labelKey": "cookingMethods.raw",
+      "provenance": "brand: color.brand.leaf",
+      "color": {
+        "base": "#3e7a4e",
+        "soft": "#dbecde",
+        "onBase": "#ffffff",
+        "onSoft": "#275433"
+      },
+      "note": "The only method with no cooking transform: yield is always 1. Disabled when the ingredient's canEatRaw is false."
+    },
+    {
+      "id": "boiled",
+      "emoji": "🫧",
+      "labelKey": "cookingMethods.boiled",
+      "provenance": "brand: color.hue.sea",
+      "color": {
+        "base": "#3d6a7a",
+        "soft": "#d5ebf4",
+        "onBase": "#ffffff",
+        "onSoft": "#015166"
+      }
+    },
+    {
+      "id": "steamed",
+      "emoji": "♨️",
+      "labelKey": "cookingMethods.steamed",
+      "provenance": "derived: OKLCH midpoint of leaf and sea, H=186.7deg",
+      "color": {
+        "base": "#28756e",
+        "soft": "#d5edea",
+        "onBase": "#ffffff",
+        "onSoft": "#005650"
+      },
+      "note": "♨️ carries a variation selector (U+2668 U+FE0F). Keep it — without it the glyph may render as monochrome text."
+    },
+    {
+      "id": "grilled",
+      "emoji": "🔥",
+      "labelKey": "cookingMethods.grilled",
+      "provenance": "brand: color.brand.carrot",
+      "color": {
+        "base": "#e07a2f",
+        "soft": "#f6e3d7",
+        "onBase": "#4c2303",
+        "onSoft": "#683c1f"
+      },
+      "note": "onBase is dark, not white: white on carrot is only 3.0:1. One of the two methods where the label inverts."
+    },
+    {
+      "id": "roasted",
+      "emoji": "🫕",
+      "labelKey": "cookingMethods.roasted",
+      "provenance": "brand: color.hue.gold",
+      "color": {
+        "base": "#b08a2e",
+        "soft": "#efe6d4",
+        "onBase": "#3a2500",
+        "onSoft": "#5b450f"
+      },
+      "note": "Also a dark label; white on gold is 3.2:1."
+    },
+    {
+      "id": "fried",
+      "emoji": "🍳",
+      "labelKey": "cookingMethods.fried",
+      "provenance": "derived: carrot darkened and reddened, H=38.5deg",
+      "color": {
+        "base": "#b9502d",
+        "soft": "#f7e1da",
+        "onBase": "#ffffff",
+        "onSoft": "#6b3a2a"
+      }
+    }
+  ],
+  "measuredState": {
+    "$description": "Glyphs for the weighed-before/after toggle. Colour comes from the method rather than from here — the toggle sits inside an already-coloured card. Labels are in strings/fr.json under `measuredState`.",
+    "raw": {
+      "emoji": "🌿",
+      "labelKey": "measuredState.beforeLong"
+    },
+    "cooked": {
+      "emoji": "🍽️",
+      "labelKey": "measuredState.afterLong",
+      "note": "Carries a variation selector (U+1F37D U+FE0F)."
+    }
+  },
+  "unitEmoji": {
+    "$description": "Cosmetic icon per Knowledge serving-unit type, from the sandbox's shortcuts.ts UNIT_EMOJI. A closed map: an unrecognised unit renders with NO icon rather than a placeholder, which the shortcut-profile vector suite pins (see the unknown-unit-has-no-emoji case). Note that teaspoon and tablespoon deliberately share a glyph.",
+    "pinch": "🤏",
+    "teaspoon": "🥄",
+    "tablespoon": "🥄",
+    "cup": "🥣",
+    "handful": "✊",
+    "small_handful": "🤲",
+    "glass": "🥛"
+  }
+}

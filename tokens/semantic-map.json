@@ -1,0 +1,187 @@
+{
+  "$description": "Which token each UI role uses. Read off the component rules in pocket-nutrition-design/foundations/pocket-nutrition.css — every entry corresponds to a real CSS rule, so this file records decisions already made rather than proposing new ones. tokens.json says what the values ARE; this says where they GO, which is the part a porter cannot infer from a palette alone.",
+  "$extensions": {
+    "pn.source": "pocket-nutrition-design/foundations/pocket-nutrition.css",
+    "pn.alphaNotation": "Some rules use an alpha of a token rather than a token itself (rgba(62, 122, 78, 0.08) is brand.leaf at 8 %). Those are written as {\"token\": \"...\", \"alpha\": 0.08}, because DTCG has no syntax for an alpha of a reference. Resolve as: take the token's RGB, apply the alpha, composite over the current surface.",
+    "pn.tokenRefs": "Every \"token\" value is a dotted path into tokens.json. scripts/emit_tokens.py fails if one does not resolve, so a typo cannot ship."
+  },
+
+  "button": {
+    "primary": {
+      "$description": "The main call to action.",
+      "background": { "token": "color.brand.leafDeep" },
+      "foreground": { "token": "color.surface.paper" },
+      "radius": { "token": "radius.pill" },
+      "hoverShadow": { "token": "shadow.button" },
+      "hoverTranslateY": "-2px",
+      "transition": { "duration": { "token": "motion.duration.fast" }, "easing": { "token": "motion.easing.outExpo" } }
+    },
+    "ghost": {
+      "background": "transparent",
+      "foreground": { "token": "color.brand.leafDeep" },
+      "border": { "width": "1.5px", "color": { "token": "color.brand.leafDeep" } },
+      "hoverBackground": { "token": "color.brand.leaf", "alpha": 0.08 },
+      "radius": { "token": "radius.pill" }
+    },
+    "accent": {
+      "$description": "Reserved for a genuinely distinct secondary action. The foreground is pure white here, NOT paper — the only place in the system that uses #fff for text.",
+      "background": { "token": "color.brand.carrot" },
+      "foreground": "#ffffff",
+      "radius": { "token": "radius.pill" }
+    }
+  },
+
+  "card": {
+    "default": {
+      "background": { "token": "color.surface.card" },
+      "border": { "width": "1px", "color": { "token": "color.ink.line" } },
+      "radius": { "token": "radius.default" },
+      "padding": { "token": "space.cardPad" }
+    },
+    "cream": {
+      "$description": "As default, but on the secondary surface.",
+      "background": { "token": "color.surface.cream" },
+      "border": { "width": "1px", "color": { "token": "color.ink.line" } },
+      "radius": { "token": "radius.default" }
+    },
+    "dark": {
+      "$description": "Inverted card. Drops the border entirely — a hairline on a dark fill reads as an artefact.",
+      "background": { "token": "color.surface.inverse" },
+      "foreground": { "token": "color.ink.onInverse" },
+      "border": "none",
+      "radius": { "token": "radius.default" }
+    },
+    "hover": {
+      "translateY": "-4px",
+      "shadow": { "token": "shadow.card" },
+      "transition": { "duration": { "token": "motion.duration.card" }, "easing": { "token": "motion.easing.outExpo" } }
+    }
+  },
+
+  "badge": {
+    "$description": "Small status/category chips: pill radius, weight 700, size 0.68rem, letter-spacing 0.02em. Each variant pairs a *Soft background with its matching onSoft foreground — never the base hue as text, which fails contrast on its own tint.",
+    "neutral": { "background": { "token": "color.surface.cream" }, "foreground": { "token": "color.ink.soft" } },
+    "ok": { "background": { "token": "color.status.okSoft" }, "foreground": { "token": "color.onSoft.ok" } },
+    "warn": { "background": { "token": "color.status.warnSoft" }, "foreground": { "token": "color.onSoft.warn" } },
+    "bad": { "background": { "token": "color.status.badSoft" }, "foreground": { "token": "color.onSoft.bad" } },
+    "sea": { "background": { "token": "color.hue.seaSoft" }, "foreground": { "token": "color.onSoft.sea" } },
+    "gold": { "background": { "token": "color.hue.goldSoft" }, "foreground": { "token": "color.onSoft.gold" } },
+    "plum": { "background": { "token": "color.hue.plumSoft" }, "foreground": { "token": "color.onSoft.plum" } },
+    "outline": {
+      "$description": "Means 'provisional / unverified'. The dashed border IS the signal, so a port must keep the dash — solid makes it read as an ordinary badge.",
+      "background": "transparent",
+      "border": { "width": "1.5px", "style": "dashed", "color": { "token": "color.status.warn" } },
+      "foreground": { "token": "color.onSoft.warn" }
+    }
+  },
+
+  "filterPill": {
+    "$description": "Toggleable filter chip. Three distinct states; hover changes border AND text, not just one of them.",
+    "idle": {
+      "background": { "token": "color.surface.card" },
+      "foreground": { "token": "color.ink.soft" },
+      "border": { "width": "1px", "color": { "token": "color.ink.line" } }
+    },
+    "hover": {
+      "borderColor": { "token": "color.brand.leaf" },
+      "foreground": { "token": "color.brand.leafDeep" }
+    },
+    "active": {
+      "background": { "token": "color.brand.leafDeep" },
+      "borderColor": { "token": "color.brand.leafDeep" },
+      "foreground": { "token": "color.surface.paper" }
+    }
+  },
+
+  "input": {
+    "default": {
+      "background": { "token": "color.surface.card" },
+      "foreground": { "token": "color.ink.default" },
+      "border": { "width": "1px", "color": { "token": "color.ink.line" } },
+      "radius": { "token": "radius.small" }
+    },
+    "focus": {
+      "$description": "Focused fields use the BRAND green, unlike every other focusable element, which uses the accent focus ring. Both behaviours are in the stylesheet; keep the distinction rather than unifying them.",
+      "borderColor": { "token": "color.brand.leaf" },
+      "ring": { "width": "3px", "color": { "token": "color.brand.leaf", "alpha": 0.18 } }
+    },
+    "label": { "foreground": { "token": "color.ink.default" }, "size": "0.8rem", "weight": 600 },
+    "help": { "foreground": { "token": "color.ink.soft" }, "size": "0.75rem" }
+  },
+
+  "table": {
+    "header": {
+      "foreground": { "token": "color.ink.soft" },
+      "borderBottom": { "width": "1px", "color": { "token": "color.ink.line" } },
+      "size": "0.68rem",
+      "letterSpacing": "0.14em",
+      "textTransform": "uppercase",
+      "weight": 600
+    },
+    "cell": { "borderBottom": { "width": "1px", "color": { "token": "color.ink.line" } } },
+    "rowHover": { "background": { "token": "color.brand.leaf", "alpha": 0.05 } }
+  },
+
+  "progress": {
+    "$description": "Segmented accuracy bar. The segment colours are NOT the status tokens throughout: the middle segment is brand.carrot, not status.warn. Transcribed as-is rather than normalised.",
+    "track": { "background": { "token": "color.surface.cream" }, "height": "10px", "radius": { "token": "radius.pill" } },
+    "segmentOk": { "background": { "token": "color.brand.leaf" } },
+    "segmentWarn": { "background": { "token": "color.brand.carrot" } },
+    "segmentBad": { "background": { "token": "color.status.bad" } }
+  },
+
+  "nav": {
+    "$description": "Sticky translucent header. The blur is load-bearing — without it the 90 % paper fill lets content show through as mud. On Android use a scrim if a real blur is too costly; on iOS an ultra-thin material background is the direct equivalent.",
+    "background": { "token": "color.surface.paper", "alpha": 0.9 },
+    "backdropBlur": "8px",
+    "borderBottom": { "width": "1px", "color": { "token": "color.ink.line" } },
+    "logo": { "foreground": { "token": "color.ink.default" }, "font": { "token": "fontFamily.display" }, "weight": 600 },
+    "logoMark": { "foreground": { "token": "color.brand.carrot" }, "$description": "The one accent-coloured glyph in the wordmark." },
+    "link": { "foreground": { "token": "color.ink.soft" }, "size": "0.88rem", "weight": 500 },
+    "linkActive": { "foreground": { "token": "color.brand.leafDeep" } }
+  },
+
+  "typography": {
+    "display": {
+      "font": { "token": "fontFamily.display" },
+      "weight": 500,
+      "lineHeight": 1.06,
+      "letterSpacing": "-0.01em",
+      "$description": "Headings. The tight line-height and negative tracking are what make this read as editorial rather than default-serif; a port that drops them loses the character."
+    },
+    "h1": { "size": "clamp(2.6rem, 5.5vw, 4.4rem)", "$description": "41.6px floor, 70.4px ceiling." },
+    "h2": { "size": "clamp(2.1rem, 4vw, 3.2rem)", "$description": "33.6px floor, 51.2px ceiling." },
+    "emphasis": {
+      "$description": "Italic inside a heading, coloured brand green. This is the system's main expressive device — the emphasised word in a headline.",
+      "fontStyle": "italic",
+      "foreground": { "token": "color.brand.leaf" }
+    },
+    "kicker": {
+      "$description": "Small uppercase label above a heading.",
+      "size": "0.72rem",
+      "letterSpacing": "0.18em",
+      "textTransform": "uppercase",
+      "weight": 600,
+      "foreground": { "token": "color.brand.leaf" }
+    },
+    "lead": { "size": "1.05rem", "lineHeight": 1.65, "foreground": { "token": "color.ink.soft" } },
+    "statValue": { "font": { "token": "fontFamily.display" }, "size": "2.2rem", "weight": 500 },
+    "statLabel": { "size": "0.75rem", "letterSpacing": "0.12em", "textTransform": "uppercase", "foreground": { "token": "color.ink.soft" } }
+  },
+
+  "focusRing": {
+    "$description": "Applies to buttons and filter pills. Text inputs use their own brand-green treatment instead — see input.focus.",
+    "color": { "token": "focus.ringColor" },
+    "width": { "token": "focus.ringWidth" },
+    "offset": { "token": "focus.ringOffset" }
+  },
+
+  "confidence": {
+    "$description": "How a prediction's confidence maps to a colour. TRANSCRIBED FROM THE SANDBOX (src/components/results/NutritionResults.tsx, confidenceColor) and re-pointed at brand tokens, because the sandbox states it in Tailwind classes that mean nothing natively. The THRESHOLDS are the contract and must not drift between clients: a user comparing the two apps on the same meal has to see the same badge. Lower bound inclusive, evaluated top to bottom.",
+    "thresholds": [
+      { "min": 0.8, "level": "ok", "background": { "token": "color.status.okSoft" }, "foreground": { "token": "color.onSoft.ok" } },
+      { "min": 0.6, "level": "warn", "background": { "token": "color.status.warnSoft" }, "foreground": { "token": "color.onSoft.warn" } },
+      { "min": 0.0, "level": "bad", "background": { "token": "color.status.badSoft" }, "foreground": { "token": "color.onSoft.bad" } }
+    ]
+  }
+}
