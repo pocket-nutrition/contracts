@@ -200,16 +200,21 @@ Two things worth knowing before using them:
   which required inverting the label to dark on grilled and roasted, where white reaches only 3.0:1
   and 3.2:1. That file's `$extensions` carries the full derivation.
 
-## French copy
+## French/English copy
 
-`strings/fr.json` started as a verbatim extraction from the sandbox. The product is French-only and
-the spec requires identical wording across clients, so this is what a porter copies from.
+`strings/fr.json` started as a verbatim French extraction from the sandbox. The sandbox itself
+stays French-only and the spec requires identical French wording across clients, so `fr` is what a
+porter copies from. Since contract 2.0.0, every `shared`/`app` entry also carries an `en` value,
+hand-translated (not machine-translated) for the native apps' language switcher — the sandbox has
+no English UI and never gets one.
 
 Every entry carries a `scope`: `shared` (reproduce everywhere), `sandbox` (the usability-test welcome
 screen and the API-gaps panel, which are researcher surfaces and must not ship in a product app), or
-`app` (wording the native clients have and the prototype does not — the local food journal, and the
-about screen with its licence and attribution obligations). Currently **99 shared, 19 sandbox-only
-and 25 app-only**; CI prints the same three numbers on every run, so a stale count here is visible.
+`app` (wording the native clients have and the prototype does not — the local food journal, the
+about screen with its licence and attribution obligations, and the language switcher itself).
+Currently **99 shared, 19 sandbox-only and 29 app-only**; CI prints the same numbers, plus an `en`
+coverage check over the shared+app entries, on every run, so a stale count or a missing translation
+is visible.
 
 Two defects are **recorded rather than silently fixed**, because normalising copy is the design
 owner's call: the sandbox mixes ASCII `'` with typographic `’`, and it uses two different emoji for

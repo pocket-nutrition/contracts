@@ -20,7 +20,7 @@
 meta:
   overlayVersion: 1
   # Contract version this overlay was written against. patch_spec.py warns on mismatch.
-  appliesToContractVersion: "1.4.0"
+  appliesToContractVersion: "2.0.0"
 
 # ─────────────────────────────────────────────────────────────────────────────────────────
 # 1. Nullability the derivation cannot see
@@ -37,11 +37,20 @@ meta:
 # would mark it required, the generators would emit it non-optional, and the first null response
 # would crash decoding. Add an `exclude` entry here if that happens.
 #
-# 1.4.0 added GET /ingredients/{id} (IngredientDetailResponse): its new scalar fields (nameFr,
-# nameEn, foodGroup, referenceWeightG, displayUnit, canEatRaw, canEatCooked, typicalState) follow
-# the same nullable-scalar shape as 1.2.0/1.3.0's brand/foodGroup, and referenceNutrition is a
-# nullable $ref normalized by the same oneOf-unwrapping rule as IngredientSuggestionWithNutrition's
-# own `nutrition` field — no new override needed.
+# 1.4.0 added GET /ingredients/{id} (IngredientDetailResponse): its new scalar fields (foodGroup,
+# referenceWeightG, displayUnit, canEatRaw, canEatCooked, typicalState) follow the same
+# nullable-scalar shape as 1.2.0/1.3.0's brand/foodGroup, and referenceNutrition is a nullable $ref
+# normalized by the same oneOf-unwrapping rule as IngredientSuggestionWithNutrition's own
+# `nutrition` field — no new override needed.
+#
+# 2.0.0 (BREAKING) replaced every fixed per-language field pair (nameFr/nameEn, aliasesFr/
+# aliasesEn, labelFr/labelEn, unitLabelFr/unitLabelEn) with a generic `List<LocalizedText>` —
+# IngredientDetailResponse.names/aliases, ServingUnit.labels, IngredientSuggestion(WithNutrition)
+# .unitLabels. The point of the change: a third language is now a knowledge-base data change only,
+# never another field pair added to this contract. LocalizedText itself is a plain two-field
+# object (lang, text), both non-nullable, so derivation marks both required with no override —
+# same for the new list fields themselves, which are non-nullable arrays (an empty list is a valid
+# "no data for this ingredient" value, not the same as the field being absent).
 requiredOverrides: {}
   # Schema -> {include: [...], exclude: [...]}, applied after derivation. Example:
   #   IngredientSuggestionWithNutrition:

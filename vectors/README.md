@@ -1,18 +1,28 @@
 # Behavioural test vectors
 
-144 cases across 17 suites — `index.json` is the authority; this line is prose and can go stale.
-Generated from the sandbox's reference implementation; consumed by `pocket-nutrition/android` and
-`pocket-nutrition/ios`.
+190 cases across 23 suites — `index.json` is the authority; this line is prose and can go stale.
+Most are generated from the sandbox's reference implementation and consumed by
+`pocket-nutrition-android` and `pocket-nutrition-ios`. Six suites (the `-en` siblings, plus two
+added cases in `deduplicate-suggestions`) are the exception — see below.
 
-**Generated files — never hand-edit.** They are produced by `pocket-nutrition/sandbox`:
+**Generated files — never hand-edit.** They are produced by `pocket-nutrition-sandbox`:
 
 ```bash
-cd ../sandbox
+cd ../pocket-nutrition-sandbox
 npm run vectors:build     # rewrites this directory
 npm test                  # fails if this directory is stale
 ```
 
 Start with `index.json`: it lists every suite, its case count, and its description.
+
+**Exception — hand-authored, not generated:** `english-number.json`, `english-plural.json`,
+`build-anchors-en.json`, `shortcut-profile-en.json`, `step-label-en.json`,
+`describe-quantity-en.json`, and two cases inside `deduplicate-suggestions.json`
+(`three-english-results-move-ahead`, `two-english-results-keep-server-order`). The sandbox stays
+French-only and has no English UI, so there is no reference implementation to generate these from
+— `npm run vectors:build` does not touch them and will not delete them, but it also cannot be used
+to add or verify a new case in one of them. Edit these files directly, and keep `index.json` and
+this file's case/suite counts in step by hand when you do.
 
 ## Why this exists
 
@@ -113,7 +123,7 @@ The highest-risk area, covered by `build-meal-ingredient` and `apply-method-chan
 ### Never invent food data
 
 `yield-factor` pins it: a missing yield resolves to **1**, meaning no conversion. Not an estimate,
-not an average. A gap belongs in `pocket-nutrition/knowledge`, reported through the feedback channel
+not an average. A gap belongs in `pocket-nutrition-knowledge`, reported through the feedback channel
 — never guessed in a client.
 
 The same applies to the two label tables: they classify a label and carry no nutritional values.

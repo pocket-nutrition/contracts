@@ -1,0 +1,414 @@
+name: CI
+
+# This repo ships data, not a build: there is no image, no release and no artefact. CI guarantees the
+# committed, generated files are not stale, because every consumer vendors them and a stale vendored
+# artefact fails silently.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Nightly, because the API can move without anyone touching this repo. Direction matters: the
+  # committed snapshot is the baseline and production is the candidate, which answers the only
+  # question a released app cares about: "has the server moved away from what we shipped?"
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet pyyaml
+
+      - name: All JSON and YAML files parse
+        run: |
+          python3 - <<'PY'
+          import json, sys, pathlib, yaml
+          bad = []
+          for path in sorted(pathlib.Path(".").rglob("*")):
+              if any(part.startswith(".git") for part in path.parts) or not path.is_file():
+                  continue
+              try:
+                  if path.suffix == ".json":
+                      json.loads(path.read_text())
+                  elif path.suffix in (".yaml", ".yml"):
+                      yaml.safe_load(path.read_text())
+                  else:
+                      continue
+              except Exception as exc:
+                  bad.append(f"{path}: {exc}")
+              else:
+                  print(f"ok  {path}")
+          if bad:
+              print("\nFAIL:")
+              print("\n".join(f"  {b}" for b in bad))
+              sys.exit(1)
+          PY
+
+      - name: openapi.patched.json is not stale
+        # Fails if overlay.yaml changed, or the upstream snapshot was refreshed, without
+        # regenerating. patch_spec.py output is byte-reproducible, so this cannot flake.
+        run: python3 scripts/patch_spec.py --check
+
+      - name: openapi.patched.json is a usable client contract
+        # Guards the specific properties the overlay exists to provide. Without them the generated
+        # clients are a bag of optionals and multi-select search silently dies — and neither shows
+        # up as a build failure in any downstream repo.
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          doc = json.load(open("openapi/openapi.patched.json"))
+          schemas = doc["components"]["schemas"]
+          failures = []
+
+          def require(condition, message):
+              if not condition:
+                  failures.append(message)
+
+          # 1. Every schema with properties must declare required, or codegen emits all-optional.
+          for name, schema in schemas.items():
+              if "properties" in schema:
+                  require("required" in schema, f"{name}: no `required` array")
+
+          # 2. The macro-nutrient core must be required — the whole point of the overlay.
+          profile = set(schemas["NutritionalProfileResponse"].get("required", []))
+          for field in ("energyKcal", "proteinG", "fatG", "carbohydratesG",
+                        "confidence", "source", "available"):
+              require(field in profile, f"NutritionalProfileResponse.{field} is not required")
+
+          # 3. Nullable micronutrients must NOT be required.
+          for field in ("fiberG", "sugarsG", "vitaminCMg"):
+              require(field not in profile, f"NutritionalProfileResponse.{field} wrongly required")
+
+          # 4. X-Segment-Count must be documented, or multi-select search disappears (spec §7.1).
+          headers = doc["paths"]["/ingredients/search"]["get"]["responses"]["200"].get("headers", {})
+          require("X-Segment-Count" in headers, "X-Segment-Count header not documented")
+
+          # 5. /health must exist — the configurable-server validation flow depends on it.
+          require("/health" in doc["paths"], "/health missing from the document")
+
+          # 6. Enums must be marked extensible; a shipped binary cannot learn a new value.
+          cooking = schemas["FoodItemRequest"]["properties"]["cookingMethod"]
+          require("x-extensible-enum" in cooking, "cookingMethod not marked extensible")
+          require("cooked" in cooking.get("enum", []),
+                  "cookingMethod enum missing 'cooked', which NutritionController accepts")
+
+          # 7. No nullable $ref may survive as oneOf-with-null: swift-openapi-generator silently
+          #    DROPS such properties from the generated struct. See scripts/patch_spec.py.
+          for name, schema in schemas.items():
+              for prop_name, prop in schema.get("properties", {}).items():
+                  variants = prop.get("oneOf") or []
+                  if any(v.get("type") == "null" for v in variants if isinstance(v, dict)):
+                      failures.append(
+                          f"{name}.{prop_name}: unnormalized oneOf-with-null — Swift would omit "
+                          f"this property entirely"
+                      )
+
+          if failures:
+              print("FAIL:")
+              print("\n".join(f"  {f}" for f in failures))
+              sys.exit(1)
+          print(f"OK: {len(schemas)} schemas form a usable client contract")
+          PY
+
+      - name: vectors/ is a well-formed behavioural corpus
+        # Structural only. The *values* are asserted by pocket-nutrition-sandbox (`npm test`), the
+        # only place the reference implementation exists — this repo has no TypeScript runtime. What
+        # CI can check here is that the corpus is internally consistent and that index.json has not
+        # drifted from the files beside it, since a consumer reads the index to decide what to load.
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, re, sys
+
+          root = pathlib.Path("vectors")
+          index = json.loads((root / "index.json").read_text())
+          failures = []
+
+          declared = {entry["suite"]: entry for entry in index["suites"]}
+          on_disk = {p.stem for p in root.glob("*.json")} - {"index"}
+
+          if set(declared) != on_disk:
+              failures.append(
+                  f"index.json lists {sorted(declared)} but the directory holds {sorted(on_disk)}"
+              )
+
+          total = 0
+          for name, entry in declared.items():
+              path = root / entry["file"]
+              if not path.exists():
+                  failures.append(f"{name}: index points at missing {entry['file']}")
+                  continue
+
+              suite = json.loads(path.read_text())
+              if suite["suite"] != name:
+                  failures.append(f"{path}: declares suite '{suite['suite']}', indexed as '{name}'")
+              if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
+                  failures.append(f"{name}: suite names must be kebab-case, they become filenames")
+              if len(suite.get("description", "")) < 60:
+                  failures.append(f"{name}: description too short to guide a port")
+
+              cases = suite["cases"]
+              if not cases:
+                  failures.append(f"{name}: no cases")
+              if len(cases) != entry["cases"]:
+                  failures.append(
+                      f"{name}: index says {entry['cases']} cases, file has {len(cases)}"
+                  )
+              total += len(cases)
+
+              ids = [case["id"] for case in cases]
+              if len(set(ids)) != len(ids):
+                  failures.append(f"{name}: duplicate case ids — consumers key on them")
+              for case in cases:
+                  where = f"{name}/{case['id']}"
+                  if "input" not in case or "expected" not in case:
+                      failures.append(f"{where}: missing input or expected")
+                  # The `why` is the only explanation a Kotlin or Swift porter ever sees.
+                  if len(case.get("why", "")) < 40:
+                      failures.append(f"{where}: why is too short to be an explanation")
+
+          if total != index["totalCases"]:
+              failures.append(f"index totalCases={index['totalCases']} but files hold {total}")
+
+          # The rounding suite is load-bearing for every numeric suite: it is where the half-up tie
+          # rule is pinned. Losing it would let a wrong Kotlin port through silently.
+          rounding = json.loads((root / "rounding.json").read_text())
+          ties = {case["id"]: case for case in rounding["cases"]}
+          for case_id, expected in (("tie-half", 1), ("tie-two-and-a-half", 3),
+                                    ("tie-twelve-and-a-half", 13)):
+              case = ties.get(case_id)
+              if case is None:
+                  failures.append(f"rounding/{case_id} is missing — the tie rule is unpinned")
+              elif case["expected"] != expected:
+                  failures.append(
+                      f"rounding/{case_id} expects {case['expected']}, must be {expected} "
+                      f"(floor(x + 0.5), NOT kotlin.math.round)"
+                  )
+
+          if failures:
+              print("FAIL:")
+              print("\n".join(f"  {f}" for f in failures))
+              sys.exit(1)
+          print(f"OK: {total} cases across {len(declared)} suites, index consistent")
+          PY
+
+      - name: tokens/generated is not stale
+        # Fails if tokens.json or semantic-map.json changed without regenerating the native
+        # sources. Also the only place semantic-map.json's token references get resolved, so a
+        # dotted-path typo fails here rather than becoming a transparent button in one app.
+        run: python3 scripts/emit_tokens.py --check
+
+      - name: strings/fr.json is a usable copy deck
+        # All three clients must show identical French wording, so a missing `fr` or an unknown
+        # `scope` is a defect the porter would otherwise resolve by guessing. `shared`/`app` entries
+        # must also carry a non-empty `en` — added in 2.0.0 for the native apps' language switcher.
+        # `sandbox` entries must NOT: the sandbox stays French-only and never gets one.
+        run: |
+          python3 - <<'PY'
+          import json, sys
+
+          deck = json.load(open("strings/fr.json"))
+          failures = []
+          # `app` joined the pair in 1.3.0. The deck previously assumed every string either belonged
+          # to all three clients or to the sandbox alone, which left nowhere to put wording for a
+          # surface the native apps have and the prototype does not — the local food journal, and the
+          # privacy line that goes with it. See $extensions."pn.scope".
+          VALID_SCOPE = {"shared", "sandbox", "app"}
+          counts = {"shared": 0, "sandbox": 0, "app": 0}
+          en_count = 0
+
+          def visit(node, path):
+              global en_count
+              if not isinstance(node, dict):
+                  return
+              if "fr" in node:
+                  where = ".".join(path)
+                  if not str(node["fr"]).strip():
+                      failures.append(f"{where}: empty `fr`")
+                  scope = node.get("scope")
+                  if scope not in VALID_SCOPE:
+                      failures.append(
+                          f"{where}: scope is {scope!r}, expected one of {sorted(VALID_SCOPE)}"
+                      )
+                      return
+                  counts[scope] += 1
+                  if scope in ("shared", "app"):
+                      if not str(node.get("en", "")).strip():
+                          failures.append(f"{where}: scope {scope!r} requires a non-empty `en`")
+                      else:
+                          en_count += 1
+                  elif "en" in node:
+                      failures.append(f"{where}: scope 'sandbox' must not carry an `en` — the sandbox stays French-only")
+                  return
+              for key, child in node.items():
+                  if key.startswith("$"):
+                      continue
+                  visit(child, path + [key])
+
+          for key, child in deck.items():
+              if key.startswith("$"):
+                  continue
+              visit(child, [key])
+
+          # Codes are wire values, not copy: a duplicate or blank one silently breaks submission.
+          catalog = deck["feedback"]["catalog"]
+          category_codes = [c["code"] for c in catalog["categories"]]
+          if len(set(category_codes)) != len(category_codes):
+              failures.append("feedback.catalog: duplicate category codes")
+
+          for category in catalog["categories"]:
+              codes = [e["code"] for e in category["errors"]]
+              if len(set(codes)) != len(codes):
+                  failures.append(f"feedback.catalog.{category['code']}: duplicate error codes")
+              for error in category["errors"]:
+                  if not error.get("code") or not error.get("fr"):
+                      failures.append(f"feedback.catalog.{category['code']}: blank code or label")
+                  named = error.get("options")
+                  if named and named not in catalog["optionLists"]:
+                      failures.append(
+                          f"feedback.catalog.{category['code']}.{error['code']}: "
+                          f"references unknown option list {named!r}"
+                      )
+
+          # Every declared option list must be referenced, or it is dead weight nobody maintains.
+          referenced = {
+              e.get("options")
+              for c in catalog["categories"]
+              for e in c["errors"]
+              if e.get("options")
+          }
+          for name in catalog["optionLists"]:
+              if not name.startswith("$") and name not in referenced:
+                  failures.append(
+                      f"feedback.catalog.optionLists.{name}: declared but never referenced"
+                  )
+
+          if failures:
+              print("FAIL:")
+              print("\n".join(f"  {f}" for f in failures))
+              sys.exit(1)
+          print(f"OK: {counts['shared']} shared strings, {counts['sandbox']} sandbox-only, "
+                f"{counts['app']} app-only, {en_count} with `en`, {len(category_codes)} feedback categories")
+          PY
+
+      - name: VERSION is semver
+        run: |
+          VERSION="$(cat VERSION)"
+          echo "VERSION=$VERSION"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::VERSION must be MAJOR.MINOR.PATCH, got '$VERSION'"; exit 1; }
+
+      - name: Every script carries an SPDX header
+        run: |
+          MISSING=0
+          for f in $(find scripts -name "*.py"); do
+            if ! head -5 "$f" | grep -q "SPDX-License-Identifier: MPL-2.0"; then
+              echo "::error::$f is missing the MPL-2.0 SPDX header"
+              MISSING=1
+            fi
+          done
+          if [[ $MISSING -eq 0 ]]; then echo "all scripts carry the SPDX header"; fi
+          exit $MISSING
+
+      - name: No GPL-3.0 contamination from OpenNutriTracker
+        # OpenNutriTracker is GPL-3.0 and sits in the same workspace. GPL-3.0 cannot be relicensed
+        # as MPL-2.0, so copied code would leave two incompatible copyleft licences in one repo —
+        # and, because GPL-3.0 §10 is what blocks App Store distribution, would re-break the
+        # mobile release this repo's licence was chosen to enable.
+        # Cheap grep; catches the accident, which is what matters.
+        run: |
+          if grep -rniE "opennutritracker|com\.opennutritracker" \
+               --include="*.py" --include="*.json" --include="*.yaml" --include="*.yml" \
+               scripts openapi tokens strings vectors 2>/dev/null; then
+            echo "::error::OpenNutriTracker identifiers found — see AGENTS.md, specification-only rule"
+            exit 1
+          fi
+          echo "clean"
+
+  # A separate job so a production outage, or a deliberate breaking API change, reports as its own
+  # failure instead of turning the whole pipeline red.
+  live-drift:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Compare the live API against the committed snapshot
+        run: |
+          set -o pipefail
+          if ! curl -fsS --max-time 30 https://api.pocketnutrition.org/v3/api-docs \
+               | python3 -m json.tool > /tmp/live.json; then
+            echo "::warning::could not reach the API — skipping the drift check"
+            exit 0
+          fi
+
+          python3 - <<'PY'
+          import json, sys
+          live = json.load(open("/tmp/live.json"))
+          committed = json.load(open("openapi/openapi.upstream.json"))
+
+          live_version = live["info"]["version"]
+          committed_version = committed["info"]["version"]
+          if live_version != committed_version:
+              print(f"::warning::contract version moved: committed {committed_version} "
+                    f"-> live {live_version}. Refresh the snapshot and re-run patch_spec.py.")
+
+          # Only the breaking direction matters: something we generated a client from has gone.
+          problems = []
+          for path in committed["paths"]:
+              if path not in live["paths"]:
+                  problems.append(f"path removed upstream: {path}")
+
+          for name, schema in committed.get("components", {}).get("schemas", {}).items():
+              live_schema = live.get("components", {}).get("schemas", {}).get(name)
+              if live_schema is None:
+                  problems.append(f"schema removed upstream: {name}")
+                  continue
+              gone = set(schema.get("properties", {})) - set(live_schema.get("properties", {}))
+              if gone:
+                  problems.append(f"{name}: properties removed upstream: {sorted(gone)}")
+
+          if problems:
+              print("::error::the live API has moved away from the committed contract")
+              print("\n".join(f"  {p}" for p in problems))
+              print("\nShipped app binaries generated their HTTP layer from the committed snapshot "
+                    "and CANNOT be updated in lockstep. Restore the field server-side, or plan a "
+                    "client migration before removing it.")
+              sys.exit(1)
+          print(f"OK: the live API is still compatible with committed contract {committed_version}")
+          PY
+
+  # The single required status check. live-drift is deliberately not a dependency: a production
+  # outage must never block a contributor's pull request.
+  ci-success:
+    name: ci-success
+    needs: [validate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if a required job failed or was cancelled
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          case "$RESULTS" in *failure*|*cancelled*) exit 1 ;; esac
